@@ -1,0 +1,52 @@
+---
+################################################################################################
+# Author: Upinder Sujlana
+# Version: v1.0.1
+# Date: 08/29/2021
+# Description: This ansible playbook automates index bloat data collection.
+# Usage: ansible-playbook -i hosts indexstats.yml --ask-become-pass -k
+###############################################################################################
+- name: this playbook runs the indexStat_improved_v5.sh script
+  hosts: all
+  #become: true
+  gather_facts: no
+  tasks:
+  - name: CREATE sandbox directory
+    file:
+      path: /tmp/indexstats
+      state: directory
+      mode: 0777
+
+  - name: COPY indexStat_improved_v5.sh over to all scvm
+    copy:
+      src: /tmp/indexStat_improved_v5.sh
+      dest: /tmp/indexstats
+      mode: 0777
+
+  - name: Execute the bash script
+    command: bash /tmp/indexstats/indexStat_improved_v5.sh
+
+  - name: Get the list of files in the remote location
+    find:
+      paths:  /var/support/
+      patterns: ".*IndexStats.out$"
+      use_regex: True
+    register: files_to_copy_back
+  - name: COPY the files back locally
+    fetch:
+      src: "{{ item.path }}"
+      dest: /tmp/
+      flat: yes
+    with_items: "{{ files_to_copy_back.files }}"
+
+#In lab SCVM seems the ansible archive module is missing. fallback is using shell for now.
+  - name: create a tar.gz file
+    shell: |
+      cd /tmp
+      tar czvf All-IndexStats.tar.gz *IndexStats.out
+    delegate_to: localhost
+
+  - name: CLEANUP-DELETE output directory
+    file:
+      path: /tmp/indexstats
+      state: absent
